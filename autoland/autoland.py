@@ -256,6 +256,116 @@ def handle_pending_mozreview_updates(logger, dbconn):
     return all_posted
 
 
+def handle_pending_test_starts(logger, dbconn):
+    """Start the tests, if source branch isn't try"""
+
+    cursor = dbconn.cursor()
+    query = """
+        select MozreviewUpdate.id,transplant_id,request,data
+        from MozreviewUpdate inner join Transplant
+        on (Transplant.id = MozreviewUpdate.transplant_id)
+        limit %(limit)s
+    """
+    cursor.execute(query, {'limit': MOZREVIEW_COMMENT_LIMIT})
+
+    mozreview_auth = mozreview.read_credentials()
+
+    updated = []
+    all_posted = True
+    for row in cursor.fetchall():
+        update_id, transplant_id, request, data = row
+        pingback_url = request.get('pingback_url')
+
+        logger.info('trying to post mozreview update to: %s for request: %s' %
+                    (pingback_url, transplant_id))
+
+        # We allow empty pingback_urls as they make testing easier. We can
+        # always check the logs for misconfigured pingback_urls.
+        if pingback_url:
+            status_code, text = mozreview.update_review(mozreview_auth,
+                                                        pingback_url, data)
+            if status_code == 200:
+                updated.append([update_id])
+            else:
+                logger.info('failed: %s - %s' % (status_code, text))
+                all_posted = False
+                break
+        else:
+            updated.append([update_id])
+
+    if updated:
+        query = """
+            delete from MozreviewUpdate
+            where id=%s
+        """
+        cursor.executemany(query, updated)
+        dbconn.commit()
+
+    return all_posted
+
+def handle_pending_test_results(logger, dbconn):
+    """Start the tests, if source branch isn't try"""
+
+    cursor = dbconn.cursor()
+    query = """
+        select MozreviewUpdate.id,transplant_id,request,data
+        from MozreviewUpdate inner join Transplant
+        on (Transplant.id = MozreviewUpdate.transplant_id)
+        limit %(limit)s
+    """
+    cursor.execute(query, {'limit': MOZREVIEW_COMMENT_LIMIT})
+
+    mozreview_auth = mozreview.read_credentials()
+
+    updated = []
+    all_posted = True
+    for row in cursor.fetchall():
+        update_id, transplant_id, request, data = row
+        result = push_to_try(update_id, transplant_id, request, data)
+        if result == False:             # failed to post
+            all_posted = False
+        else:
+            updated.append(result)      # push_to_try returns update_id
+
+    if updated:
+        query = """
+            delete from MozreviewUpdate
+            where id=%s
+        """
+        cursor.executemany(query, updated)
+        dbconn.commit()
+
+    return all_posted
+
+def make_twin_commit():
+    """Create a Git commit that matches the HG commit, or vice versa"""
+    pass
+
+def push_to_auto():
+    pass
+
+def push_to_try(update_id, transplant_id, request, data):
+    """ Return update_id if update was successful, or False if it failed"""
+        pingback_url = request.get('pingback_url')
+
+        logger.info('trying to post mozreview update to: %s for request: %s' %
+                    (pingback_url, transplant_id))
+
+        # We allow empty pingback_urls as they make testing easier. We can
+        # always check the logs for misconfigured pingback_urls.
+        if pingback_url:
+            status_code, text = mozreview.update_review(mozreview_auth,
+                                                        pingback_url, data)
+            if status_code == 200:
+                return update_id
+            else:
+                logger.info('failed: %s - %s' % (status_code, text))
+                return False
+
+        else:
+            return update_id
+
+
 def get_dbconn(dsn):
     dbconn = None
     while not dbconn:
@@ -291,6 +401,8 @@ def main():
     next_mozreview_update = datetime.datetime.now()
     while True:
         try:
+            handle_pending_test_starts(logger, dbconn)
+            handle_pending_test_results(logger, dbconn)
             handle_pending_transplants(logger, dbconn)
 
             # TODO: In normal configuration, all updates will be posted to the
