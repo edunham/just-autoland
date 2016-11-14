@@ -342,6 +342,9 @@ def make_twin_commit():
     pass
 
 def push_to_auto():
+    """Push the Git commit of a pair to Servo repo's Auto branch for testing"""
+    # https://github.com/servo/homu/blob/master/homu/main.py#L474 and maybe
+    # https://github.com/servo/homu/blob/master/homu/main.py#L747
     pass
 
 def push_to_try(update_id, transplant_id, request, data):
@@ -364,6 +367,21 @@ def push_to_try(update_id, transplant_id, request, data):
 
         else:
             return update_id
+
+def update_github_status():
+    """Tell GitHub about the status of a build"""
+    # https://github.com/servo/homu/blob/master/homu/utils.py#L41
+    pass
+
+def update_github_comment():
+    """ This is the equivalent of update_mozreview but for commenting on GH issue"""
+    # https://github.com/servo/homu/blob/master/homu/server.py#L338
+    pass
+
+def update_mozreview():
+    """Post a message to MozReview"""
+    """Refactor out of the bulk mozreview update function"""
+    pass
 
 
 def get_dbconn(dsn):
